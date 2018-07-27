@@ -21,6 +21,7 @@ from rclpy.expand_topic_name import expand_topic_name
 from rclpy.guard_condition import GuardCondition
 from rclpy.impl.implementation_singleton import rclpy_implementation as _rclpy
 from rclpy.logging import get_logger
+from rclpy.parameter import Parameter
 from rclpy.publisher import Publisher
 from rclpy.qos import qos_profile_default, qos_profile_services_default
 from rclpy.service import Service
@@ -53,6 +54,7 @@ class Node:
 
     def __init__(self, node_name, *, cli_args=None, namespace=None, use_global_arguments=True):
         self._handle = None
+        self._parameters = {}
         self.publishers = []
         self.subscriptions = []
         self.clients = []
@@ -96,6 +98,33 @@ class Node:
 
     def get_logger(self):
         return self._logger
+
+    def get_parameters(self, names):
+        if not all(isinstance(name, str) for name in names):
+            # todo(nuclearsandwich) what is the preferred argument error?
+            raise RuntimeError('names must be a list of str objects')
+
+    def get_parameter(self, name):
+        if name not in self._parameters:
+            return None
+        return self._parameters[name]
+
+    def set_parameters(self, params_dict_or_list):
+        if isinstance(params_dict_or_list, dict):
+            for name, param in params_dict_or_list.items():
+                self._parameters[name] = param
+        elif isinstance(params_dict_or_list, list):
+            for param in params_dict_or_list:
+                self._parameters[param.name] = param
+
+    def set_parameter(self, param):
+        if not isinstance(param, Parameter):
+            raise TypeError('Object must be a Parameter')
+        self._parameters[param.name] = param
+
+    # WIP while params interface settles.
+    #def set_parameter(self, name, value):
+    #    self._parameters[name] = Parameter(name, value)
 
     def _validate_topic_or_service_name(self, topic_or_service_name, *, is_service=False):
         name = self.get_name()

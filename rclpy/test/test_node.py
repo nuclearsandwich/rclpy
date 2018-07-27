@@ -18,6 +18,7 @@ from rcl_interfaces.srv import GetParameters
 import rclpy
 from rclpy.exceptions import InvalidServiceNameException
 from rclpy.exceptions import InvalidTopicNameException
+from rclpy.parameter import Parameter
 from test_msgs.msg import Primitives
 
 TEST_NODE = 'my_node'
@@ -147,6 +148,39 @@ class TestCreateNode(unittest.TestCase):
             node = rclpy.create_node('my_node', namespace='/my_ns', cli_args=['__ns:=/foo/bar'])
             self.assertEqual('/foo/bar', node.get_namespace())
             node.destroy_node()
+        finally:
+            rclpy.shutdown()
+
+    def test_node_set_parameter(self):
+        rclpy.init()
+        try:
+            node = rclpy.create_node('my_node', namespace='/my_ns')
+            node.set_parameter(Parameter('bar', 2.41))
+            self.assertEqual(node._parameters['bar'].value, 2.41)
+        finally:
+            rclpy.shutdown()
+
+    def test_node_set_parameters(self):
+        rclpy.init()
+        try:
+            node = rclpy.create_node('my_node', namespace='/my_ns')
+            node.set_parameters({
+                'foo': Parameter('foo', 42),
+                'bar': Parameter('bar', 'hello'),
+                'baz': Parameter('baz', 2.41)})
+            self.assertEqual(node.get_parameter('foo').value, 42)
+            self.assertEqual(node.get_parameter('bar').value, 'hello')
+            self.assertEqual(node.get_parameter('baz').value, 2.41)
+        finally:
+            rclpy.shutdown()
+
+    def test_node_get_parameter(self):
+        rclpy.init()
+        try:
+            node = rclpy.create_node('my_node', namespace='/my_ns')
+            node.set_parameter(Parameter('foo', 42))
+            self.assertIsInstance(node.get_parameter('foo'), Parameter)
+            self.assertEqual(node.get_parameter('foo').value, 42)
         finally:
             rclpy.shutdown()
 
