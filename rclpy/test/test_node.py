@@ -15,6 +15,7 @@
 import unittest
 
 from rcl_interfaces.srv import GetParameters
+from rcl_interfaces.msg import SetParametersResult
 import rclpy
 from rclpy.exceptions import InvalidServiceNameException
 from rclpy.exceptions import InvalidTopicNameException
@@ -151,26 +152,33 @@ class TestCreateNode(unittest.TestCase):
         finally:
             rclpy.shutdown()
 
-    def test_node_set_parameter(self):
-        rclpy.init()
-        try:
-            node = rclpy.create_node('my_node', namespace='/my_ns')
-            node.set_parameter(Parameter('bar', 2.41))
-            self.assertEqual(node._parameters['bar'].value, 2.41)
-        finally:
-            rclpy.shutdown()
-
     def test_node_set_parameters(self):
         rclpy.init()
         try:
             node = rclpy.create_node('my_node', namespace='/my_ns')
-            node.set_parameters({
-                'foo': Parameter('foo', 42),
-                'bar': Parameter('bar', 'hello'),
-                'baz': Parameter('baz', 2.41)})
+            results = node.set_parameters([
+                Parameter('foo', Parameter.Type.INTEGER, 42),
+                Parameter('bar', Parameter.Type.STRING, 'hello'),
+                Parameter('baz', Parameter.Type.DOUBLE, 2.41)])
+            self.assertTrue(all(isinstance(result, SetParametersResult) for result in results))
+            self.assertTrue(all(result.successful for result in results))
             self.assertEqual(node.get_parameter('foo').value, 42)
             self.assertEqual(node.get_parameter('bar').value, 'hello')
             self.assertEqual(node.get_parameter('baz').value, 2.41)
+        finally:
+            rclpy.shutdown()
+
+    def test_node_set_parameters_atomically(self):
+        rclpy.init()
+        try:
+            node = rclpy.create_node('my_node', namespace='/my_ns')
+            result = node.set_parameters_atomically([
+                Parameter('foo', Parameter.Type.INTEGER, 42),
+                Parameter('bar', Parameter.Type.STRING, 'hello'),
+                Parameter('baz', Parameter.Type.DOUBLE, 2.41)])
+            self.assertEqual(node.get_parameter('foo').value, 42)
+            self.assertIsInstance(result, SetParametersResult)
+            self.assertTrue(result.successful)
         finally:
             rclpy.shutdown()
 
@@ -178,9 +186,29 @@ class TestCreateNode(unittest.TestCase):
         rclpy.init()
         try:
             node = rclpy.create_node('my_node', namespace='/my_ns')
-            node.set_parameter(Parameter('foo', 42))
+            node.set_parameters([Parameter('foo', Parameter.Type.INTEGER, 42)])
             self.assertIsInstance(node.get_parameter('foo'), Parameter)
             self.assertEqual(node.get_parameter('foo').value, 42)
+        finally:
+            rclpy.shutdown()
+
+    def test_node_has_parameter_services(self):
+        rclpy.init()
+        try:
+            node = rclpy.create_node('my_node', namespace='/my_ns', start_parameter_services=True)
+            service_names_and_types = node.get_service_names_and_types()
+            self.assertIn(('/my_ns/my_node/describe_parameters', ['rcl_interfaces/DescribeParameters']),
+                service_names_and_types)
+            self.assertIn(('/my_ns/my_node/get_parameter_types', ['rcl_interfaces/GetParameterTypes']),
+                service_names_and_types)
+            self.assertIn(('/my_ns/my_node/get_parameters', ['rcl_interfaces/GetParameters']),
+                service_names_and_types)
+            self.assertIn(('/my_ns/my_node/list_parameters', ['rcl_interfaces/ListParameters']),
+                service_names_and_types)
+            self.assertIn(('/my_ns/my_node/set_parameters', ['rcl_interfaces/SetParameters']),
+                service_names_and_types)
+            self.assertIn(('/my_ns/my_node/set_parameters_atomically', ['rcl_interfaces/SetParametersAtomically']),
+                service_names_and_types)
         finally:
             rclpy.shutdown()
 

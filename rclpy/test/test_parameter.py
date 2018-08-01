@@ -17,53 +17,52 @@ import unittest
 from rclpy.parameter import Parameter
 
 
-class TestNode(unittest.TestCase):
+class TestParameter(unittest.TestCase):
 
     def test_create_boolean_parameter(self):
-        p = Parameter('myparam', True)
+        p = Parameter('myparam', Parameter.Type.BOOL, True)
         self.assertEqual(p.name, 'myparam')
         self.assertEqual(p.value, True)
 
     def test_create_bytes_parameter(self):
-        p = Parameter('myparam', b'pvalue')
+        p = Parameter('myparam', Parameter.Type.BYTE_ARRAY,  b'pvalue')
         self.assertEqual(p.name, 'myparam')
         self.assertEqual(p.value, b'pvalue')
 
     def test_create_float_parameter(self):
-        p = Parameter('myparam', 2.41)
+        p = Parameter('myparam', Parameter.Type.DOUBLE, 2.41)
         self.assertEqual(p.name, 'myparam')
         self.assertEqual(p.value, 2.41)
 
     def test_create_integer_parameter(self):
-        p = Parameter('myparam', 42)
+        p = Parameter('myparam', Parameter.Type.INTEGER, 42)
         self.assertEqual(p.name, 'myparam')
         self.assertEqual(p.value, 42)
 
     def test_create_string_parameter(self):
-        p = Parameter('myparam', 'pvalue')
+        p = Parameter('myparam', Parameter.Type.STRING, 'pvalue')
         self.assertEqual(p.name, 'myparam')
         self.assertEqual(p.value, 'pvalue')
 
-    @unittest.skip('not yet implemented')
     def test_create_boolean_array_parameter(self):
-        p = Parameter('myparam', [True, False, True])
+        p = Parameter('myparam', Parameter.Type.BOOL_ARRAY, [True, False, True])
         self.assertEqual(p.value, [True, False, True])
 
-    @unittest.skip('not yet implemented')
     def test_create_float_array_parameter(self):
-        p = Parameter('myparam', [2.41, 6.28])
+        p = Parameter('myparam', Parameter.Type.DOUBLE_ARRAY, [2.41, 6.28])
         self.assertEqual(p.value, [2.41, 6.28])
 
-    @unittest.skip('not yet implemented')
     def test_create_integer_array_parameter(self):
-        p = Parameter('myparam', [1, 2, 3])
+        p = Parameter('myparam', Parameter.Type.INTEGER_ARRAY, [1, 2, 3])
         self.assertEqual(p.value, [1, 2, 3])
 
-    @unittest.skip('not yet implemented')
     def test_create_string_array_parameter(self):
-        p = Parameter('myparam', ['hello', 'world'])
+        p = Parameter('myparam', Parameter.Type.STRING_ARRAY, ['hello', 'world'])
         self.assertEqual(p.value, ['hello', 'world'])
 
-    def test_prevent_illegal_value_type(self):
-        with self.assertRaises(ValueError):
-            Parameter('illegaltype', ())
+    def test_error_on_illegal_value_type(self):
+        with self.assertRaises(RuntimeError):
+            Parameter('illegaltype','mytype', 'myvalue')
+
+if __name__ == '__main__':
+    unittest.main()
