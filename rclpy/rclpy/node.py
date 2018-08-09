@@ -60,7 +60,7 @@ class Node:
 
     def __init__(
         self, node_name, *, cli_args=None, namespace=None, use_global_arguments=True,
-        start_parameter_services=True
+        start_parameter_services=True, initial_parameters=[]
     ):
         self._handle = None
         self._parameters = {}
@@ -99,6 +99,15 @@ class Node:
         self._time_source.attach_clock(self._clock)
 
         self.__executor_weakref = None
+
+        for param in _rclpy.rclpy_get_node_parameters(self.handle):
+            self._parameters[param.name] = param
+        for param in initial_parameters:
+            if not isinstance(param, Parameter):
+                raise TypeError(
+                    'initial_parameters must be a list or dict of {}'.format(repr(Parameter))
+                )
+            self._parameters[param.name] = param
 
         if start_parameter_services:
             self._parameter_service = ParameterService(self)
