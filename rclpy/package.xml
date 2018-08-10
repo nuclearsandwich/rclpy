@@ -6,9 +6,9 @@
   <description>Package containing the Python client.</description>
 
   <maintainer email="william@osrfoundation.org">William Woodall</maintainer>
-  
+
   <license>Apache License 2.0</license>
-  
+
   <author email="esteve@osrfoundation.org">Esteve Fernandez</author>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
@@ -19,6 +19,7 @@
 
   <depend>rmw_implementation</depend>
   <depend>rcl</depend>
+  <depend>rcl_yaml_param_parser</depend>
 
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>builtin_interfaces</exec_depend>

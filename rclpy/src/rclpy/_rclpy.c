@@ -21,6 +21,7 @@
 #include <rcl/rcl.h>
 #include <rcl/time.h>
 #include <rcl/validate_topic_name.h>
+#include <rcl_yaml_param_parser/parser.h>
 #include <rcutils/strdup.h>
 #include <rcutils/types.h>
 #include <rmw/error_handling.h>
@@ -3389,10 +3390,11 @@ rclpy_clock_set_ros_time_override(PyObject * Py_UNUSED(self), PyObject * args)
  *         false when there was an error during parsing and a Python exception was raised.
  *
  */
-static bool _get_param_files(rcl_args_t * args, rcl_allocator_t * allocator, rcl_params_t * params)
+static bool _get_param_files(rcl_arguments_t * args, rcl_allocator_t allocator, rcl_params_t * params)
 {
   char ** param_files;
   int param_files_count = rcl_arguments_get_param_files_count(args);
+  rcl_ret_t ret;
   if (param_files_count > 0) {
     ret = rcl_arguments_get_param_files(args, allocator, &param_files);
     if (RCL_RET_OK != ret) {
@@ -3432,17 +3434,17 @@ static PyObject * _parameter_from_rcl_variant(
   int type_enum_value;
   PyObject * value;
   if (variant->bool_value) {
-    type_value = 1;
+    type_enum_value = 1;
     value = variant->bool_value ? Py_True : Py_False;
   } else if (variant->integer_value) {
     type_enum_value = 2;
     value = PyLong_FromLong(*(variant->integer_value));
   } else if (variant->double_value) {
     type_enum_value = 3;
-    value = PyDouble_FromDouble(*(variant->double_value));
+    value = PyFloat_FromDouble(*(variant->double_value));
   } else if (variant->string_value) {
     type_enum_value = 4;
-    value = PyUnicode_FromString(variant->string);
+    value = PyUnicode_FromString(variant->string_value);
   } else if (variant->byte_array_value) {
     type_enum_value = 5;
     value = PyList_New(variant->byte_array_value->size);
@@ -3465,22 +3467,19 @@ static PyObject * _parameter_from_rcl_variant(
     type_enum_value = 8;
     value = PyList_New(variant->double_array_value->size);
     for (int i = 0; i < variant->double_array_value->size; i++) {
-      PyList_SetItem(value, i, PyDouble_FromDouble(variant->double_array_value->values[i]));
+      PyList_SetItem(value, i, PyFloat_FromDouble(variant->double_array_value->values[i]));
     }
   } else if (variant->string_array_value) {
     type_enum_value = 8;
     value = PyList_New(variant->string_array_value->size);
     for (int i = 0; i < variant->string_array_value->size; i++) {
-      PyList_SetItem(value, i, PyUnicode_FromString(variant->string_array_value->values[i]));
+      PyList_SetItem(value, i, PyUnicode_FromString(variant->string_array_value->data[i]));
     }
+  }
 
-  PyObject * type_kwargs = PyDict_New();
-  PyObject * type;
-  PyDict_SetItemString(type_kwargs, "value", PyLong_FromLong(1));
-  type = PyObject_Call(parameter_type_cls, PyTuple_New(0), type_kwargs);
-  param = PyObject_CallObject(parameter_cls, Py_BuildValue("sOO", name, type, value));
+  PyObject * type = PyObject_CallObject(parameter_type_cls, Py_BuildValue("(i)", type_enum_value));
+  PyObject * param = PyObject_CallObject(parameter_cls, Py_BuildValue("sOO", name, type, value));
 
-  Py_DECREF(type_kwargs);
   Py_DECREF(type);
   return param;
 }
@@ -3500,55 +3499,51 @@ static PyObject * _parameter_from_rcl_variant(
 static PyObject *
 rclpy_get_node_parameters(PyObject * Py_UNUSED(self), PyObject * args)
 {
-  PyTypeObject * parameter_type_cls
+  PyObject * parameter_cls;
   PyObject * node_capsule;
-  if (!PyArg_ParseTuple("O", &node_capsule)) {
+  if (!PyArg_ParseTuple(args, "OO", &parameter_cls, &node_capsule)) {
     return NULL;
   }
 
   rcl_ret_t ret;
   rcl_node_t * node = (rcl_node_t *)PyCapsule_GetPointer(node_capsule, "rcl_node_t");
-  rcl_allocator_t allocator = node->options->allocator;
+  const rcl_node_options_t * node_options = rcl_node_get_options(node);
+  const rcl_allocator_t allocator = node_options->allocator;
   if (!node) {
-    return NULL
+    return NULL;
   }
 
-  rcl_arguments_t * rcl_args;
-  int param_files_count;
-  char ** param_files;
   rcl_params_t * params = rcl_yaml_node_struct_init(allocator);
-  if (NULL = params) {
+  if (NULL == params) {
     PyErr_Format(PyExc_RuntimeError, "Failed to allocate initial parameters");
     return NULL;
   }
 
-
-  if (node->options->use_global_arguments) {
-    rcl_args = rcl_get_global_arguments();
+  if (node_options->use_global_arguments) {
     if (!_get_param_files(rcl_get_global_arguments(), allocator, params)) {
       rcl_yaml_node_struct_fini(params);
       return NULL;
     }
   }
 
-  if (!_get_param_files(node->options->arguments, allocator, params)) {
+  if (!_get_param_files(&(node_options->arguments), allocator, params)) {
     rcl_yaml_node_struct_fini(params);
     return NULL;
   }
 
   int node_index = -1;
   const char * node_namespace = rcl_node_get_namespace(node);
-  const char * node_name_with_namespace
+  const char * node_name_with_namespace;
   if ('/' == node_namespace[strlen(node_namespace) - 1]) {
-    node_name_with_namespace = rcutils_format_string("%s/%s",
+    node_name_with_namespace = rcutils_format_string(allocator, "%s/%s",
         rcl_node_get_name(node), node_namespace);
   } else {
-    node_name_with_namespace = rcutils_format_string("%s%s",
+    node_name_with_namespace = rcutils_format_string(allocator, "%s%s",
         rcl_node_get_name(node), node_namespace);
   }
   // TODO(nuclearsandwich) is it possible for one node to have multiple entries?
-  for (int i = 0; i < params.num_nodes; i++) {
-    if (0 == strcmp(params.node_names[i], node_name_with_namespace)) {
+  for (int i = 0; i < params->num_nodes; i++) {
+    if (0 == strcmp(params->node_names[i], node_name_with_namespace)) {
       node_index = i;
     }
   }
@@ -3559,13 +3554,16 @@ rclpy_get_node_parameters(PyObject * Py_UNUSED(self), PyObject * args)
     return PyList_New(0);
   }
 
-  rcl_node_params_t * node_params = params->params[node_index];
-  PyObject * parameter_list = PyList_New(node_params->num_params);
-  for (int i = 0; i < node_params->num_params; i++) {
-    PyList_SetItem(parameter_list, i, _python_parameter_from_rcl_variant(
-      &(node_params->parameter_values[i])));
+  PyObject * parameter_type_cls = PyObject_GetAttrString(parameter_cls, "Type");
+  rcl_node_params_t node_params = params->params[node_index];
+  PyObject * parameter_list = PyList_New(node_params.num_params);
+  for (int i = 0; i < node_params.num_params; i++) {
+    PyList_SetItem(parameter_list, i, _parameter_from_rcl_variant(
+      node_params.parameter_names[i], &(node_params.parameter_values[i]),
+      parameter_cls, parameter_type_cls));
   }
 
+  Py_DECREF(parameter_type_cls);
   rcl_yaml_node_struct_fini(params);
   return parameter_list;
 }
@@ -3800,6 +3798,10 @@ static PyMethodDef rclpy_methods[] = {
     "Get node names list from graph API."
   },
   {
+    "rclpy_get_node_parameters", rclpy_get_node_parameters, METH_VARARGS,
+    "Get the initial parameters for a node from the command line."
+  },
+  {
     "rclpy_get_topic_names_and_types", rclpy_get_topic_names_and_types, METH_VARARGS,
     "Get topic list from graph API."
   },
@@ -3890,5 +3892,6 @@ static struct PyModuleDef _rclpymodule = {
 /// Init function of this module
 PyMODINIT_FUNC PyInit__rclpy(void)
 {
+
   return PyModule_Create(&_rclpymodule);
 }
